@@ -209,6 +209,70 @@
       font-size: 14px;
       word-break: break-all;
     }
+
+    /* Add these styles to your existing CSS */
+/* Add these styles to your existing CSS */
+.token-details {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-top: 15px;
+  padding: 10px;
+  background-color: rgba(0, 51, 0, 0.2);
+  border: 1px dashed #00ff00;
+  border-radius: 5px;
+  font-size: 14px;
+  width: 100%;
+}
+
+.detail-item {
+  display: flex;
+  justify-content: space-between;
+  padding: 3px 0;
+  border-bottom: 1px dotted rgba(0, 255, 0, 0.3);
+}
+
+.ca-box {
+  background-color: rgba(0, 51, 0, 0.3);
+  padding: 5px 10px;
+  border-radius: 4px;
+  margin-bottom: 5px;
+  font-size: 14px;
+  word-break: break-all;
+}
+
+/* Animation for the details appearing */
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(10px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.token-details {
+  animation: fadeIn 0.5s ease-out forwards;
+}
+
+/* Make the prediction area taller to accommodate the details */
+.prediction {
+  min-height: 200px; /* Increased height to fit more details */
+}
+
+/* Style the explorer link */
+.explorer-link {
+  color: #00ff00;
+  text-decoration: none;
+  padding: 5px 10px;
+  border: 1px solid #00ff00;
+  border-radius: 3px;
+  margin-top: 10px;
+  display: inline-block;
+  transition: all 0.3s;
+  text-align: center;
+}
+
+.explorer-link:hover {
+  background-color: rgba(0, 255, 0, 0.2);
+  box-shadow: 0 0 10px rgba(0, 255, 0, 0.5);
+}
   </style>
 </head>
 <body>
@@ -312,6 +376,7 @@
     });
     
     // Prediction logic
+// Update the summonPrediction function to display more details
     async function summonPrediction() {
       // Show loading
       document.getElementById("loading").style.display = "block";
@@ -334,12 +399,90 @@
           return;
         }
         
-        // Simulate "typing" effect
-        const typeDelay = 30; // ms between characters
-        const randomToken = tokens[Math.floor(Math.random() * tokens.length)];
+        // Filter for promising coins (coins with higher liquidity and reasonable price)
+        const promisingTokens = tokens.filter(token => {
+          // Only include tokens with liquidity data
+          if (!token.liquidity) return false;
+          
+          // Convert liquidity to a number
+          const liquidityNum = parseFloat(token.liquidity);
+          
+          // Check if it has decent liquidity (at least $5000)
+          if (liquidityNum < 5000) return false;
+          
+          // Check if it has a reasonable price (not too high, not too low)
+          if (token.price) {
+            const priceNum = parseFloat(token.price);
+            // Skip tokens with extremely high or low prices
+            if (priceNum > 1.0 || priceNum < 0.000000001) return false;
+          }
+          
+          // Check if it has volume
+          if (token.volume24h) {
+            const volumeNum = parseFloat(token.volume24h);
+            if (volumeNum < 1000) return false;
+          }
+          
+          return true;
+        });
+        
+        // If no promising tokens found, fall back to all tokens
+        const tokensToUse = promisingTokens.length > 0 ? promisingTokens : tokens;
+        
+        // Pick a random token from our filtered list
+        const randomToken = tokensToUse[Math.floor(Math.random() * tokensToUse.length)];
+        console.log("Token data:", randomToken); // Debug: Log the token data to see structure
         const name = randomToken.name || "Unknown";
         const symbol = randomToken.symbol || "???";
         
+        // Look for contract address in different possible properties
+        const mint = randomToken.mint || randomToken.address || randomToken.contractAddress || randomToken.tokenAddress || "Unknown Address";
+        
+        // Format creation time (convert timestamp to readable US format with AM/PM)
+        let creationTime = "Unknown";
+        if (randomToken.createdAt) {
+          const date = new Date(randomToken.createdAt);
+          creationTime = date.toLocaleString('en-US', { 
+            month: 'short', 
+            day: 'numeric', 
+            year: 'numeric',
+            hour: 'numeric',
+            minute: 'numeric',
+            second: 'numeric',
+            hour12: true,
+            timeZone: 'America/New_York'
+          }) + ' EST';
+        }
+        
+        // Get liquidity and price info if available
+        const price = randomToken.price ? `${parseFloat(randomToken.price).toFixed(12)}` : "Unknown";
+        const liquidity = randomToken.liquidity ? `${parseInt(randomToken.liquidity).toLocaleString()}` : "Unknown";
+        
+        // Get volume info
+        const volume24h = randomToken.volume24h ? `${parseInt(randomToken.volume24h).toLocaleString()}` : "Unknown";
+        
+        // Calculate market cap if possible
+        let marketCap = "Unknown";
+        if (randomToken.price && randomToken.totalSupply) {
+          const mcValue = parseFloat(randomToken.price) * parseFloat(randomToken.totalSupply);
+          marketCap = `${parseInt(mcValue).toLocaleString()}`;
+        }
+        
+        // Get current timestamp in US format
+        const now = new Date();
+        const currentTime = now.toLocaleString('en-US', { 
+          month: 'short', 
+          day: 'numeric', 
+          year: 'numeric',
+          hour: 'numeric',
+          minute: 'numeric',
+          second: 'numeric',
+          hour12: true,
+          timeZone: 'America/New_York'
+        }) + ' EST';
+        
+        // Simulate "typing" effect for the main prediction
+        const typeDelay = 30; // ms between characters
         const predictionElement = document.getElementById("prediction");
         predictionElement.innerHTML = ""; // Clear previous content
         
@@ -353,11 +496,23 @@
             i++;
           } else {
             clearInterval(typeEffect);
-            // Add contract address after typing effect completes
-            const caElement = document.createElement("div");
-            caElement.className = "ca-box";
-            caElement.textContent = `CA: ${mint}`;
-            predictionElement.appendChild(caElement);
+            
+            // Create details box with more information
+            const detailsElement = document.createElement("div");
+            detailsElement.className = "token-details";
+            
+            // Let's also add a link to view the token on a blockchain explorer
+            const explorerLink = mint !== "Unknown Address" 
+              ? `<a href="https://solscan.io/token/${mint}" target="_blank" class="explorer-link">View on Solscan</a>` 
+              : "";
+            
+            detailsElement.innerHTML = `
+              <div class="ca-box">CA: ${mint}</div>
+              <div class="detail-item">Created: ${creationTime}</div>
+              <div class="detail-item">Liquidity: ${liquidity}</div>
+              ${explorerLink}
+            `;
+            predictionElement.appendChild(detailsElement);
           }
         }, typeDelay);
       } catch (error) {
